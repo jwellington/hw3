@@ -6,6 +6,7 @@
 int mm_init(unsigned long size)
 {
 	memory = (MEMORY*)malloc(sizeof(MEMORY));
+	memory->barrier = NULL;
     char * start = (char*)malloc(size);
 	if(start == NULL)
 	{
@@ -27,11 +28,17 @@ int mm_init(unsigned long size)
 char * search_for_free(USED * current_memory, unsigned long no_of_chars)
 {
 	USED * next = current_memory->next;
-	if(next == NULL)
+	if(next == NULL) //We're on the last in-use block
 	{
 		if(memory->end - current_memory->end > no_of_chars)
 		{
-			return current_memory->end;
+		    USED * new_used = (USED*)malloc(sizeof(USED));
+		    new_used->start = current_memory->end;
+		    new_used->end = new_used->start + no_of_chars;
+		    current_memory->next = new_used;
+		    new_used->next = NULL;
+		    new_used->barrier_level = num_barriers();
+			return new_used->start;
 		}
 		else
 		{
@@ -40,6 +47,7 @@ char * search_for_free(USED * current_memory, unsigned long no_of_chars)
 			return NULL;
 		}
 	}
+	//Is there space between two blocks
 	else if((next->start - current_memory->end) >= no_of_chars)
 	{
 		USED * new_used = (USED*)malloc(sizeof(USED));
@@ -47,6 +55,7 @@ char * search_for_free(USED * current_memory, unsigned long no_of_chars)
 		new_used->end = new_used->start + no_of_chars;
 		current_memory->next = new_used;
 		new_used->next = next;
+		new_used->barrier_level = num_barriers();
 		return new_used->start;
 	}
 	else
@@ -58,16 +67,17 @@ char * search_for_free(USED * current_memory, unsigned long no_of_chars)
 //Allocate space for no_of_chars and return pointer
 char * mm_alloc(unsigned long no_of_chars)
 {
-	
+	//If no memory is currently allocated
 	if(memory->first_used == NULL)
 	{
+	    //If there is enough space in the memory block
 		if(memory->end - memory->start >= no_of_chars)
 		{
-			
 			USED * new_used = (USED*)malloc(sizeof(USED));
 			new_used->start = memory->start;
 			new_used->end = new_used->start + no_of_chars;
 			new_used->next = NULL;
+			new_used->barrier_level = num_barriers();
 			memory->first_used = new_used;
 			return new_used->start;
 		}
@@ -80,17 +90,19 @@ char * mm_alloc(unsigned long no_of_chars)
 	}
 	else
 	{
-		if(memory->first_used->start - memory->end >= no_of_chars)
+	    //Is there space at the beginning of the memory block?
+		if(memory->first_used->start - memory->start >= no_of_chars)
 		{
 			
 			USED * new_used = (USED*)malloc(sizeof(USED));
 			new_used->start = memory->start;
 			new_used->end = new_used->start + no_of_chars;
 			new_used->next = memory->first_used;
+			new_used->barrier_level = num_barriers();
 			memory->first_used = new_used;
 			return new_used->start;
 		}
-		else
+		else //Have to search for space
 		{
 			return search_for_free(memory->first_used, no_of_chars);
 		}
@@ -169,7 +181,7 @@ USED * search_for_buffered(USED * current_used, char * ptr)
 	}
 }
 
-//Assign a pointer to a value is it has been properly allocated
+//Assign a pointer to a value if it has been properly allocated
 int mm_assign(char * ptr, char val)
 {
 	USED * first_used = memory->first_used;
@@ -235,8 +247,77 @@ int mm_end()
 	}
 }
 
+void mm_barrier_start()
+{
+    BARRIER* new_barrier = (BARRIER *)malloc(sizeof(BARRIER));
+    new_barrier->buffer_overflows_init = memory->buffer_overflows;
+    new_barrier->free_errors_init = memory->free_errors;
+    if (memory->barrier == NULL)
+    {
+        new_barrier->next = NULL;
+        memory->barrier = new_barrier;
+    }
+    else
+    {
+        new_barrier->next = memory->barrier;
+        memory->barrier = new_barrier;
+    }
+}
+
+int mm_barrier_end()
+{
+    if (memory->barrier == NULL)
+    {
+        error("mm_barrier_end: Called before mm_barrier_start()");
+        return -1;
+    }
+    else
+    {
+        int barrier_level = num_barriers();
+        BARRIER* cur_barrier = memory->barrier;
+        memory->barrier = cur_barrier->next;
+        cur_barrier->next = NULL;
+        int buffer_overflows = memory->buffer_overflows - cur_barrier->buffer_overflows_init;
+        int free_errors =  memory->free_errors - cur_barrier->free_errors_init;
+        int memory_leaks = 0;
+        USED* cur_used = memory->first_used;
+        while (cur_used != NULL)
+        {
+            if (cur_used->barrier_level == barrier_level)
+            {
+                memory_leaks++;
+            }
+            cur_used = cur_used->next;
+        }
+        //Get rid of the old barrier
+        free(cur_barrier);
+        printf("Barrier %d: %d buffer overflows, %d free errors, and %d memory leaks.\n",
+               barrier_level-1, buffer_overflows, free_errors, memory_leaks);
+        return buffer_overflows + free_errors + memory_leaks;
+    }
+}
+
+int num_barriers()
+{
+    if (memory->barrier == NULL)
+    {
+        return 0;
+    }
+    else
+    {
+        BARRIER* cur_barrier = memory->barrier;
+        int count = 0;
+        while (cur_barrier != NULL)
+        {
+            cur_barrier = cur_barrier->next;
+            count++;
+        }
+        return count;
+    }
+}
+
 void error(char * message)
 {
-	fprintf(stderr, message);
+	fprintf(stderr, "%s", message);
 	fprintf(stderr, "\n");
 }
