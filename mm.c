@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include "mm.h"
+#include <string.h>
 
 //Initializes mm with the specified amount of available storage.
 int mm_init(unsigned long size)
@@ -151,7 +152,6 @@ int mm_free(char *ptr)
 		{
 		    //If ptr is the start of the first block
 			memory->first_used = first_used->next;
-			printf("%d\n", first_used->barrier_level);
 			free(first_used);
 			return 0;
 		}
@@ -162,7 +162,6 @@ int mm_free(char *ptr)
 			if(before_free != NULL)
 			{
 			    USED* to_be_freed = before_free->next;
-			    printf("%d\n", to_be_freed->barrier_level);
 				before_free->next = before_free->next->next;
 				free(to_be_freed);
 			}
@@ -254,9 +253,9 @@ int mm_end()
 		{
 			leak_count = count_memory_leaks_and_free(1, memory->first_used);
 		}
-		printf("Memory Leaks: %d\n", leak_count);
-		printf("Buffer Overflows: %d\n", memory->buffer_overflows);
-		printf("Free Errors: %d\n", memory->free_errors);
+		printf("%d Memory Leaks\n", leak_count);
+		printf("%d Buffer Overflows\n", memory->buffer_overflows);
+		printf("%d Free Errors\n", memory->free_errors);
 		free(memory);
 		memory = NULL;
 		return 0;
@@ -322,8 +321,19 @@ int mm_barrier_end()
         }
         //Get rid of the old barrier
         free(cur_barrier);
-        printf("Barrier %d: %d buffer overflows, %d free errors, and %d memory leaks.\n",
-               barrier_level-1, buffer_overflows, free_errors, memory_leaks);
+        char level_str[10];
+        sprintf(level_str, "%d", barrier_level-1);
+        int indentlen = strlen("Barrier : ") + strlen(level_str) + 1;
+        char indent[indentlen];
+        int i;
+        for (i = 0; i < indentlen - 1; i++)
+        {
+            indent[i] = ' ';
+        }
+        indent[indentlen-1] = '\0';
+        printf("Barrier %d: %d Memory Leaks\n%s%d Free Errors\n%s%d Buffer Overflows\n",
+               barrier_level-1, memory_leaks, indent, free_errors, indent,
+               buffer_overflows);
         return buffer_overflows + free_errors + memory_leaks;
     }
 }
