@@ -1,0 +1,52 @@
+David Pitchford
+3594118
+pitch006
+
+Jacob Wellington
+3664486
+welli037
+
+CSci 4061
+Assignment 3
+
+The purpose of this assignment is to create a memory mananagement system
+similar to the built-in malloc and free commands. The system also provides 
+memory error-tracking and debugging tools. Currently mm.c can only be used to
+allocate space for char pointers. Usage is as follows:
+
+int mm_init(unsigned long size);
+Called by a process using mm.c at the start of its execution. Starts mm.c with
+a total memory space of size bytes.
+Returns: 0 on success, -1 on failure.
+
+int mm_end();
+Ends the current session with mm.c. Frees all memory allocated by it and prints
+memory errors that occurred (buffer overflows, free errors, memory leaks).
+Returns: 0 on success, -1 if called without a corresponding call it mm_init.
+
+char* mm_alloc(unsigned long no_of_chars);
+Allocates space in mm's memory for a string of length no_of_chars and returns
+a pointer to the beginning of the space.
+Returns: A pointer to the allocated memory, or NULL if there is not enough 
+space.
+
+int mm_free(char* ptr);
+Frees an allocated memory block starting at ptr.
+Returns: 0 on success, -1 if ptr does not correspond to a previously allocated
+block or has already been freed.
+
+int mm_assign(char* ptr, char val);
+Assigns the byte at locartion ptr to val. Will cause a buffer overflow if ptr
+is not part of an allocated block.
+Returns: 0 on success, -1 on error.
+
+void mm_barrier_start();
+int mm_barrier_end();
+These methods provide debugging tools for memory errors. mm_barrier_start
+creates a memory barrier and mm_barrier_end ends the last created barrier.
+It also prints out the memory errors that have occurred since the barrier
+was created (similar to mm_end, but it does not change any allocated blocks).
+Barriers can be nested.
+Returns: The total number of memory errors inside the ended barrier. Returns 0
+if there have been no errors, or -1 if called without a corresponding call to
+mm_barrier_start.

@@ -2,7 +2,7 @@
 #include <stdlib.h>
 #include "mm.h"
 
-
+//Initializes mm with the specified amount of available storage.
 int mm_init(unsigned long size)
 {
 	memory = (MEMORY*)malloc(sizeof(MEMORY));
@@ -24,12 +24,15 @@ int mm_init(unsigned long size)
 	}
 }
 
-//Recursively search through the USED linked list for free space and create new USED item there
+//Subroutine of mm_alloc
+//Recursively search through the USED linked list for free space and create 
+//new USED item there
 char * search_for_free(USED * current_memory, unsigned long no_of_chars)
 {
 	USED * next = current_memory->next;
 	if(next == NULL) //We're on the last in-use block
 	{
+	    //Is there between the last block and the end of the memory?
 		if(memory->end - current_memory->end > no_of_chars)
 		{
 		    USED * new_used = (USED*)malloc(sizeof(USED));
@@ -43,7 +46,6 @@ char * search_for_free(USED * current_memory, unsigned long no_of_chars)
 		else
 		{
 			error("mm_alloc: Not enough space");
-			
 			return NULL;
 		}
 	}
@@ -64,7 +66,7 @@ char * search_for_free(USED * current_memory, unsigned long no_of_chars)
 	}
 }
 
-//Allocate space for no_of_chars and return pointer
+//Allocate space for no_of_chars and return pointer to it
 char * mm_alloc(unsigned long no_of_chars)
 {
 	//If no memory is currently allocated
@@ -84,7 +86,6 @@ char * mm_alloc(unsigned long no_of_chars)
 		else
 		{
 			error("mm_alloc: Not enough space");
-			
 			return NULL;
 		}
 	}
@@ -110,7 +111,9 @@ char * mm_alloc(unsigned long no_of_chars)
 	
 }
 
+//Subroutine of mm_free
 //Search through USED linked list to find a start pointer
+//Returns address of the block BEFORE the one to be freed
 USED * search_for_used(USED * current_used, char * ptr)
 {
 	USED * next_used = current_used->next;
@@ -135,6 +138,7 @@ USED * search_for_used(USED * current_used, char * ptr)
 int mm_free(char *ptr)
 {
 	USED * first_used = memory->first_used;
+	//Can't free if nothing is allocated
 	if(first_used == NULL)
 	{
 		error("mm_free: Memory not freeable");
@@ -145,18 +149,22 @@ int mm_free(char *ptr)
 	{
 		if(first_used->start == ptr)
 		{
-		
+		    //If ptr is the start of the first block
 			memory->first_used = first_used->next;
+			printf("%d\n", first_used->barrier_level);
 			free(first_used);
 			return 0;
 		}
 		else
 		{
+		    //Have to search for the correct block
 			USED * before_free = search_for_used(memory->first_used, ptr);
 			if(before_free != NULL)
 			{
+			    USED* to_be_freed = before_free->next;
+			    printf("%d\n", to_be_freed->barrier_level);
 				before_free->next = before_free->next->next;
-				free(before_free->next);
+				free(to_be_freed);
 			}
 			return 0;
 		}
@@ -164,17 +172,21 @@ int mm_free(char *ptr)
 	
 }
 
+//Subroutine of mm_assign
 //Search to see if a pointer is in an allocated buffer
 USED * search_for_buffered(USED * current_used, char * ptr)
 {
+    //If ptr is in current_used
 	if(ptr - current_used->start >= 0 && current_used->end - ptr > 0)
 	{
 		return current_used;
 	}
+    //Not found
 	else if(current_used->next == NULL)
 	{
 		return NULL;
 	}
+	//Else, check next used block
 	else
 	{
 		return search_for_buffered(current_used->next, ptr);
@@ -185,18 +197,20 @@ USED * search_for_buffered(USED * current_used, char * ptr)
 int mm_assign(char * ptr, char val)
 {
 	USED * first_used = memory->first_used;
+	//ptr is before all allocated blocks
 	if(first_used == NULL || ptr - first_used->start < 0)
 	{
 		error("mm_assign: Buffer overflow");
 		memory->buffer_overflows++;
 		return -1;
 	}
+	//ptr is in first block
 	else if(ptr - first_used->start >= 0 && first_used->end - ptr > 0)
 	{
 		*ptr = val;
 		return 0;
 	}
-	else
+	else //Have to search for the correct block
 	{
 		if(first_used->next == NULL || search_for_buffered(first_used->next, ptr) == NULL)
 		{
@@ -211,6 +225,9 @@ int mm_assign(char * ptr, char val)
 		}
 	}
 }
+
+//Subroutine of mm_end
+//Counts the number of memory blocks remaining (memory leaks) and frees them
 int count_memory_leaks_and_free(int count, USED * current_used)
 {
 	if(current_used->next != NULL)
@@ -224,6 +241,10 @@ int count_memory_leaks_and_free(int count, USED * current_used)
 		return count;
 	}
 }
+
+//Called by process using mm_end when it is finished
+//Frees all remaining space alocated by mm and counts the number of memory
+//errors
 int mm_end()
 {
 	if(memory != NULL)
@@ -247,6 +268,10 @@ int mm_end()
 	}
 }
 
+//Creates a barrier that is useful for debugging memory errors. Barriers keep
+//track of memory errors that occur between the corresponding start and end
+//statements similar to a limited version of mm_init and mm_end.
+//Barriers are stored in a stack pointed to by the variable memory
 void mm_barrier_start()
 {
     BARRIER* new_barrier = (BARRIER *)malloc(sizeof(BARRIER));
@@ -264,6 +289,8 @@ void mm_barrier_start()
     }
 }
 
+//Ends the last created barrier and prints out the memory errors that occurred
+//since it was created
 int mm_barrier_end()
 {
     if (memory->barrier == NULL)
@@ -273,6 +300,8 @@ int mm_barrier_end()
     }
     else
     {
+        //Remove the last created barrier from the stack and get its
+        //information
         int barrier_level = num_barriers();
         BARRIER* cur_barrier = memory->barrier;
         memory->barrier = cur_barrier->next;
@@ -281,11 +310,13 @@ int mm_barrier_end()
         int free_errors =  memory->free_errors - cur_barrier->free_errors_init;
         int memory_leaks = 0;
         USED* cur_used = memory->first_used;
+        //Find remaining blocks of memory created within this barrier
         while (cur_used != NULL)
         {
             if (cur_used->barrier_level == barrier_level)
             {
                 memory_leaks++;
+                cur_used->barrier_level--;
             }
             cur_used = cur_used->next;
         }
@@ -297,6 +328,7 @@ int mm_barrier_end()
     }
 }
 
+//Return the current number of memory barriers in place
 int num_barriers()
 {
     if (memory->barrier == NULL)
@@ -316,6 +348,7 @@ int num_barriers()
     }
 }
 
+//Print error message message
 void error(char * message)
 {
 	fprintf(stderr, "%s", message);
